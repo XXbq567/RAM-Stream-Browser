@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RAM-Stream-Browser</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <!-- Sprint 1: 整个 Webview2 直接加载 B站。
+       工具栏和调试面板通过 src/inject/preload.js 注入到 B站页面中。
+       这个 HTML 仅作为初始加载页面，加载后立即跳转到 B站。 -->
+  <script>
+    // 立即跳转到 B站
+    window.location.href = 'https://www.bilibili.com';
+  </script>
+</body>
+</html>

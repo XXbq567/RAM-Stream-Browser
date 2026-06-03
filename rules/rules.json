@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "min_app_version": "0.1.0",
+  "published_at": "2026-06-03T00:00:00Z",
+  "platforms": {
+    "bilibili": {
+      "selector_video_element": "video",
+      "selector_video_container": ".bpx-player-video-wrap, #bilibili-player .bpx-player-video-wrap",
+      "playinfo_global_var": "__playinfo__",
+      "playurl_endpoint_patterns": [
+        "api.bilibili.com/x/player/playurl",
+        "api.bilibili.com/x/player/wbi/playurl",
+        "api.bilibili.com/pgc/player/web/playurl"
+      ],
+      "quality_preference": [125, 120, 116, 112, 80, 74, 64, 32, 16],
+      "quality_names": {
+        "125": "4K HDR",
+        "120": "4K",
+        "116": "1080p60 HDR",
+        "112": "1080p60+",
+        "80": "1080p",
+        "74": "720p60",
+        "64": "720p",
+        "32": "480p",
+        "16": "360p"
+      },
+      "codec_preference": ["av1", "hevc", "avc"],
+      "cookie_domains": [".bilibili.com"],
+      "referer": "https://www.bilibili.com",
+      "danmaku_player_getter": "window.player?.getDanmaku?.()"
+    },
+    "youtube": {
+      "_comment": "Future: not yet implemented",
+      "needs_ytdlp": true
+    }
+  }
+}

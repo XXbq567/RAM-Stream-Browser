@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/KemingHe/nicepkg-vscode-tauri/main/schemas/capabilities.schema.json",
+  "identifier": "default",
+  "description": "Default capabilities for RAM-Stream-Browser",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-close",
+    "core:window:allow-set-size",
+    "core:window:allow-set-title",
+    "core:webview:default",
+    "core:webview:allow-create-webview-window",
+    "core:webview:allow-set-webview-position",
+    "core:webview:allow-set-webview-size",
+    "shell:allow-open",
+    "opener:default"
+  ]
+}
