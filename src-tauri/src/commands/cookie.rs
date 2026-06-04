@@ -1,39 +1,13 @@
 /// Cookie extraction command.
 /// Sprint 1: Receives cookies from the frontend (via document.cookie).
-/// Sprint 2: Will also support direct Webview2 CookieManager COM access.
+/// Sprint 2: Stores in AppState for mpv player launch.
 
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CookieEntry {
-    pub name: String,
-    pub value: String,
-    pub domain: String,
-}
-
-/// Simple parser for document.cookie string.
-/// Format: "name1=value1; name2=value2"
-fn parse_cookie_string(raw: &str) -> Vec<CookieEntry> {
-    raw.split(';')
-        .filter_map(|pair| {
-            let pair = pair.trim();
-            if pair.is_empty() {
-                return None;
-            }
-            let mut parts = pair.splitn(2, '=');
-            let name = parts.next()?.trim().to_string();
-            let value = parts.next().unwrap_or("").trim().to_string();
-            Some(CookieEntry {
-                name,
-                value,
-                domain: ".bilibili.com".to_string(),
-            })
-        })
-        .collect()
-}
+use crate::parsers::{CookieEntry, parse_cookie_string};
+use crate::state::global_state;
+use crate::protocol;
 
 /// Receive the raw document.cookie string from the frontend.
-/// Print key cookie names for Sprint 1 verification.
+/// Store in AppState and trigger player launch if playinfo is also available.
 #[tauri::command]
 pub fn submit_cookies(cookies: String) -> Result<Vec<CookieEntry>, String> {
     let entries = parse_cookie_string(&cookies);
@@ -43,10 +17,9 @@ pub fn submit_cookies(cookies: String) -> Result<Vec<CookieEntry>, String> {
     for entry in &entries {
         if key_names.contains(&entry.name.as_str()) {
             log::info!(
-                "[Cookie] {} = {}...{} (len={})",
+                "[Cookie] {} = {}... (len={})",
                 entry.name,
-                entry.value.chars().take(6).collect::<String>(),
-                entry.value.chars().rev().take(6).collect::<String>().chars().rev().collect::<String>(),
+                &entry.value.chars().take(6).collect::<String>(),
                 entry.value.len()
             );
         }
@@ -58,8 +31,17 @@ pub fn submit_cookies(cookies: String) -> Result<Vec<CookieEntry>, String> {
     let has_sessdata = entries.iter().any(|c| c.name == "SESSDATA");
     if !has_sessdata {
         log::warn!("[Cookie] ⚠️ SESSDATA not found! User may not be logged in, or cookie is HttpOnly.");
-        log::warn!("[Cookie] HttpOnly cookies cannot be read via document.cookie. Will use CookieManager API in Sprint 2.");
+        log::warn!("[Cookie] HttpOnly cookies cannot be read via document.cookie. Will use CookieManager API in Sprint 3.");
     }
+
+    // Store in AppState for player launch
+    if let Ok(mut s) = global_state().lock() {
+        s.cookies = Some(entries.clone());
+        log::info!("[Cookie] Stored {} cookies in AppState (via IPC)", entries.len());
+    }
+
+    // Trigger player launch if playinfo is also available
+    protocol::try_launch_player();
 
     Ok(entries)
 }

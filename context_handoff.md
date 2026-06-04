@@ -1,6 +1,6 @@
 # RAM-Stream-Browser — 上下文交接文档
 
-> 最后更新：2026-06-03 | 状态：Sprint 1 调试中
+> 最后更新：2026-06-04 | 状态：Sprint 2 — 核心播放验证代码就绪，待 GUI 测试
 
 ---
 
@@ -20,7 +20,10 @@
 |------|------|
 | Sprint 0（设计） | ✅ 完成 |
 | Sprint 1（代码） | ✅ 编译通过 |
-| Sprint 1（验证） | 🔴 阻塞 — IPC bridge 在远程域名不可用 |
+| Sprint 2（代码） | 🟡 编译通过 — 待 GUI 验证 | libmpv 播放链路代码就绪 |
+| Sprint 2（调试） | 🟡 2026-06-04 | 修复 preload.js bridge 干扰 + 为 try_launch_player/find_mpv 添加诊断日志 |
+| Sprint 2（验证） | 🔴 未执行 | 需在 GUI 环境跑 `npx tauri dev` 测试完整链路 |
+| mpv.exe 环境 | ✅ 已就绪 | `C:\Program Files\MPV Player\mpv.exe` v0.41.0 |
 
 详见 `PROGRESS.md`
 
@@ -86,30 +89,65 @@ Tauri 2.0 (Rust)
 - **现象**：`document.cookie` 无法获取 `SESSDATA`（大会员关键 cookie）
 - **计划**：Sprint 2 用 `webview2-com` COM API 直接访问 CookieManager
 
-### 坑 8：B站 iframe 限制
-- B站设置了 `X-Frame-Options: DENY`，无法在 iframe 中嵌入
-- 这意味着不能简单用 iframe 套 B站，必须用 Webview 直接导航
+### 坑 9：Tauri 2.0 外域 IPC 被 ACL 拦截
+- **现象**：`submit_cookies not allowed. Plugin not found`
+- **原因**：自定义 `generate_handler!()` 命令在外部域名（bilibili.com）被 Tauri 2.0 安全 ACL 拦截，且**无法通过 capabilities 配置绕过**（编译时权限系统会验证）
+- **解决**：放弃 JS `invoke()` 通道，改用 Rust 侧原生方法
+
+### 坑 10：WebView2 混合内容拦截自定义协议
+- **现象**：`fetch('ram-stream://...')` 和 `XMLHttpRequest` 从 HTTPS 页面被完全拦截，Rust 终端无任何日志
+- **原因**：WebView2 的混合内容策略将 HTTPS→自定义协议的 fetch/XHR 视为"主动混合内容"并拦截
+- **解决**：改用 `<img>` 标签 beacon（被动内容，不受混合内容策略限制）+ `webview2-com` 原生 COM API
+
+### 坑 11：`__TAURI_INTERNALS__` 存在但不等于 IPC 可用
+- **现象**：工具栏显示 🟢 IPC，但 `invoke()` 报错 "not allowed"
+- **原因**：Tauri 2.0 在外部域名会注入 `__TAURI_INTERNALS__` 对象，但 `invoke()` 调用受 ACL 权限控制。对象存在 ≠ 可调用自定义命令
+- **教训**：不要相信 IPC 状态灯，要实际发起一次调用并看错误信息
+
+### 坑 12：preload.js 在 bridge.html 上干扰 AppState
+- **现象**：bridge.html 通过 IPC 发送真实数据后 mpv 仍不启动
+- **原因**：preload.js 对每个页面注入且无来源检查：
+  - `autoSendCookies()` 读取 bridge.html 的 `document.cookie`（空/无关）→ 通过 img beacon 送到 `handle_submit_cookies` → 用空条目覆盖 AppState
+  - 2 秒延迟诊断发送 `submit_cookies({cookies:'test=1'})` 通过 Tauri IPC → 再次覆盖真实 cookie
+  - `startPlayinfoPoll()` 在 bridge 页面无意义轮询
+- **解决**：在 `init()` 中检查 `location.href.indexOf('bridge.html')`，跳过 auto-send、diagnostic、playinfo poll
+
+### 坑 13：`try_launch_player()` 静默失败
+- **现象**：IPC 返回值为成功，但 mpv 窗口从不出现，Rust 日志无任何线索
+- **原因**：每个提前返回路径（cookies None / playinfo None / player_running true）均无日志
+- **解决**：为每个提前返回路径添加 `log::info!`，明确标注哪个条件失败及附加上下文（如 playinfo_json 是否存在、cookie 数量）
 
 ## 7. 下一步
 
-### 立即（Sprint 1 收尾）
-1. 确定 Tauri 2.0 的 IPC 是否可在远程域名工作
-2. 如果不能 → 切换到多 Webview 架构
-3. 验证 Cookie 和 `__playinfo__` 提取
+### 立即（Sprint 2 GUI 验证）🧪
+1. **运行 `npx tauri dev`** — 启动 app，确认编译通过、窗口出现、加载 B站
+2. **登录 B站** — 确认 cookie 自动发送（Rust 日志 `[Cookie] Stored N cookies in AppState`）
+3. **打开任意 B站视频** — 确认 playinfo 自动捕获（日志 `[PlayInfo] Stored in AppState`）
+4. **验证自动播放** — 日志 `[Launch] 🚀 Starting mpv player` → mpv 窗口弹出 → 视频播放
+5. **检查 RAM 缓冲** — 任务管理器确认内存增长到 2GB
+6. **测试画质切换** — 工具栏下拉选择不同画质 → mpv 重启新流
+7. **测试停止按钮** — 点击 Stop → mpv 窗口关闭
 
-### 短期（Sprint 2）
-1. 安装 libmpv dev 库
-2. 实现 `BilibiliAdapter`（解析 DASH 流）
-3. 实现 `MpvInstance`（创建、配置、播放）
-4. Cookie 透传（CookieManager COM API）
-5. 音画分离播放验证
-6. RAM 缓冲配置
+### 短期（Sprint 2 修复）
+1. 如果 403 → 检查 cookie 是否完整透传（`--http-header-fields`）
+2. 如果无 HttpOnly SESSDATA → Sprite 3 用 webview2-com CookieManager
+3. 如果 DASH URL 过期 → 改 `try_launch_player` 抓取 playinfo 的时效性
+4. 画质切换重启逻辑 → 优化为 mpv 命令行热切换（当前是 kill + 重新 spawn）
 
-### 中期（Sprint 3）
-1. 内存配置 UI（滑块 500MB~8GB）
-2. 画质切换
-3. B站 UI 控件转发
-4. 缓冲状态可视化
+### 架构变更（2026-06-04，Sprint 2 实施后）
+```
+数据流: preload.js → img beacon → ram-stream:// protocol → AppState → try_launch_player() → mpv.exe 子进程
+播放器: mpv.exe 独立原生窗口（非嵌入 Tauri），2GB forward buffer + 512MB backward buffer
+控制: 浏览器窗口工具栏提供画质选择 + 停止按钮，通过 img beacon 发指令
+```
+```
+新增文件:
+  src-tauri/src/parsers/mod.rs  — 共享解析模块（消除 protocol/commands 重复代码）
+  src-tauri/src/state.rs        — 全局 AppState（OnceLock + Arc<Mutex<>>）
+  src-tauri/src/mpv/mod.rs      — mpv 子进程启动器（非 libmpv crate，纯 Command::spawn）
+
+删除: lib.rs 中手动的 eval() cookie 提取（preload.js 现在自动处理）
+```
 
 ## 8. 关键文件索引
 
@@ -118,8 +156,12 @@ Tauri 2.0 (Rust)
 | `PROJECT_REPORT.md` | 项目报告、功能清单、架构 |
 | `PROGRESS.md` | 详细进度跟踪 |
 | `tests/e2e-checklist.md` | 测试计划 |
-| `src/inject/preload.js` | 核心注入脚本 |
-| `src-tauri/src/lib.rs` | Tauri 入口 |
+| `src/inject/preload.js` | 核心注入脚本（含画质选择 + 停止按钮） |
+| `src-tauri/src/lib.rs` | Tauri 入口（State 初始化、mpv 检测） |
+| `src-tauri/src/protocol.rs` | 自定义协议处理器（AppState 存储 + 播放触发） |
+| `src-tauri/src/parsers/mod.rs` | 🆕 共享解析模块（消除重复代码） |
+| `src-tauri/src/state.rs` | 🆕 全局 AppState（OnceLock + Arc<Mutex<>>） |
+| `src-tauri/src/mpv/mod.rs` | 🆕 mpv 子进程启动器（非 libmpv crate） |
 | `rules/rules.json` | B站适配规则 |
 | `白皮书/视频浏览器想法.txt` | 原始设计 v1.0 |
 | `白皮书/视频浏览器想法1.txt` | 务实版本 v2.0 |

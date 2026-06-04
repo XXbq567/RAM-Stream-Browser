@@ -6,7 +6,7 @@
   "build": {
     "frontendDist": "../src",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "cd .. && npm run serve",
+    "beforeDevCommand": "npm run serve --prefix C:\\Users\\WBLbo\\Documents\\GitHub\\RAM-Stream-Browser",
     "beforeBuildCommand": ""
   },
   "app": {
